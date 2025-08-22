@@ -102,7 +102,7 @@ disk_calc() {
   USED=$(printf "%s\n" "$line" | awk '{print $2}')
   RAWPCT=$(printf "%s\n" "$line" | awk '{print $3}')
   if [ -z "$TOTAL" ] || [ -z "$USED" ]; then
-    DISK_AVAIL="0"; DISK_TOTAL="0"; DISK_USEPCT=""; DISK_USEPCT_STR=""
+    DISK_AVAIL="0"; DISK_TOTAL="0"; DISK_USEPCT=""
     return
   fi
   USEP=$(printf "%s" "$RAWPCT" | tr -d '%')
@@ -113,7 +113,6 @@ disk_calc() {
   DISK_AVAIL="$USED"
   DISK_TOTAL="$TOTAL"
   DISK_USEPCT="$USEP"
-  DISK_USEPCT_STR="$RAWPCT"
 }
 
 # memory (bytes)
@@ -134,7 +133,9 @@ cpu_sample(){
   NOW_T=$(date +%s.%N 2>/dev/null || date +%s)
   if [ "$is_v2" -eq 1 ]; then
     CUR_U=$(awk '/^usage_usec/ {print $2}' "$cg/cpu.stat" 2>/dev/null)
-    set -- $(rd "$cg/cpu.max" "max 100000"); QUOTA="$1"; PERIOD="$2"
+    line=$(rd "$cg/cpu.max" "max 100000")
+    QUOTA=$(printf "%s" "$line" | awk '{print $1}')
+    PERIOD=$(printf "%s" "$line" | awk '{print $2}')
     if [ -n "$OVR_CPU_LIM" ]; then
       CORES_LIM="$OVR_CPU_LIM"
     elif [ "$QUOTA" = "max" ] || [ -z "$PERIOD" ]; then
