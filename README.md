@@ -3,7 +3,7 @@
 `cgstats.sh` is a lightweight POSIX-compatible shell script that shows **live CPU, memory, and disk usage** directly from Linux **cgroups v1/v2**.
 
 It is designed to run **inside containers** (or any Linux system with `/sys/fs/cgroup` mounted) and gives you instant visibility into CPU, memory, and disk usage compared to configured limits.  
-Unlike Kubernetes- or Prometheus-based monitoring, it requires **no agents, sidecars, or external services** — just drop it into a pod or container and run it.
+Unlike Kubernetes- or Prometheus-based monitoring, it requires **no agents, sidecars, or external services** just drop it into a pod or container and run it.
 
 The script has **zero dependencies** (pure `/bin/sh`) and outputs either **human-readable tables** (with colorized thresholds) or **machine-readable JSON** for easy integration into dashboards, editors, or CI pipelines.
 
@@ -130,14 +130,14 @@ Fri Aug 22 07:54:01 UTC 2025
 
 ## Possible Use Case ideas
 
-- **VS Code extension backend**  
-  Run `cgstats.sh --output json` inside a pod and parse the JSON in a VS Code extension to display live CPU, memory, and disk stats in the editor UI.
+- **Interactive containers / notebooks**  
+  Particularly useful in environments like **Kubeflow Notebooks** or **VS Code Server in Kubernetes**, where users often need a quick way to check their CPU, memory, and disk limits from inside the running container.
 
 - **Lightweight container introspection**  
   Add the script directly into container images. This gives developers and operators a zero-dependency way to inspect live resource usage without setting up Prometheus, Grafana, or external agents.
 
-- **Interactive containers / notebooks**  
-  Particularly useful in environments like **Kubeflow Notebooks** or **VS Code Server in Kubernetes**, where users often need a quick way to check their CPU, memory, and disk limits from inside the running container.
+- **VS Code extension backend**  
+  Run `cgstats.sh --output json` inside a pod and parse the JSON in a VS Code extension to display live CPU, memory, and disk stats in the editor UI.
 
 ## Requirements
 
@@ -145,4 +145,14 @@ Fri Aug 22 07:54:01 UTC 2025
 - POSIX-compatible shell (`/bin/sh`)
 - Standard tools: awk and df
 - No extra dependencies for table or JSON output
-- JSON mode is implemented internally — **`jq` is not required**
+- JSON mode is implemented internally and **`jq` is not required**
+
+## Compatibility
+
+This script is written in **pure POSIX sh** – no Bashisms.
+It has been successfully tested on:
+
+- **BusyBox** and **Alpine containers**
+- Debian/Ubuntu `/bin/sh`
+
+This ensures it works in **minimal container images and interactive environments** where only BusyBox is available.
