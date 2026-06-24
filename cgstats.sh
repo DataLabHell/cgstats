@@ -121,6 +121,16 @@ disk_calc() {
   DISK_USEPCT="$USEP"
 }
 
+# Iterate MON_PATHS (comma-separated, possibly repeated -p) and call $1 with
+# each non-empty path. Single source of truth for path splitting.
+for_each_path() {
+  _cb="$1"
+  IFS=','; for p in $MON_PATHS; do
+    [ -n "$p" ] || continue
+    "$_cb" "$p"
+  done; unset IFS
+}
+
 # memory (bytes)
 mem_read(){
   if [ "$is_v2" -eq 1 ]; then
@@ -188,6 +198,20 @@ cpu_sample(){
 }
 
 # ---- output: TABLE ----
+# Per-path callback for table mode (invoked via for_each_path).
+disk_row_table() {
+  p="$1"
+  disk_calc "$p"
+  if [ -z "$DISK_TOTAL" ] || [ "$DISK_TOTAL" = "0" ]; then
+    printf '%b  • Disk %s: N/A%b\n' "$YELLOW" "$p" "$NC"
+    return
+  fi
+  USED_MB=$(h_mib "$DISK_AVAIL"); TOTAL_MB=$(h_mib "$DISK_TOTAL")
+  dcol=$(pct_color "$DISK_USEPCT" "$DISK_WARN" "$DISK_CRIT")
+  printf '  • Disk %s: %b%s MiB / %s MiB (used%%: %s%%)%b\n' \
+    "$p" "$dcol" "$USED_MB" "$TOTAL_MB" "$DISK_USEPCT" "$NC"
+}
+
 print_table() {
   # header
   printf '\033[H\033[J'
@@ -223,23 +247,27 @@ print_table() {
   
   # DISK
   if [ "$SHOW_DISK" -eq 1 ]; then
-    IFS=','; for p in $MON_PATHS; do
-      [ -n "$p" ] || continue
-      disk_calc "$p"
-      if [ -z "$DISK_TOTAL" ] || [ "$DISK_TOTAL" = "0" ]; then
-        printf '%b  • Disk %s: N/A%b\n' "$YELLOW" "$p" "$NC"
-        continue
-      fi
-      USED_MB=$(h_mib "$DISK_AVAIL"); TOTAL_MB=$(h_mib "$DISK_TOTAL")
-      dcol=$(pct_color "$DISK_USEPCT" "$DISK_WARN" "$DISK_CRIT")
-      printf '  • Disk %s: %b%s MiB / %s MiB (used%%: %s%%)%b\n' \
-        "$p" "$dcol" "$USED_MB" "$TOTAL_MB" "$DISK_USEPCT" "$NC"
-    done; unset IFS
+    for_each_path disk_row_table
   fi
 }
 
 # ---- output: JSON ----
 # Note: no jq dependency, escape manually
+# Per-path callback for JSON mode (invoked via for_each_path). Uses the global
+# `first` to emit comma separators between array elements.
+disk_obj_json() {
+  p="$1"
+  disk_calc "$p"
+  [ "$first" -eq 0 ] && printf ','
+  first=0
+  if [ -z "$DISK_TOTAL" ] || [ "$DISK_TOTAL" = "0" ]; then
+    printf '{"path":"%s","used_mib":null,"total_mib":null,"percent":null}' "$p"
+  else
+    printf '{"path":"%s","used_mib":%d,"total_mib":%d,"percent":%d}' \
+      "$p" "$(h_mib "$DISK_AVAIL")" "$(h_mib "$DISK_TOTAL")" "$DISK_USEPCT"
+  fi
+}
+
 print_json() {
   TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   CG_VER=$( [ -f "$cg/cgroup.controllers" ] && echo v2 || echo v1 )
@@ -278,18 +306,7 @@ print_json() {
   if [ "$SHOW_DISK" -eq 1 ]; then
     printf ',"disks":['
     first=1
-    IFS=','; for p in $MON_PATHS; do
-      [ -n "$p" ] || continue
-      disk_calc "$p"
-      [ $first -eq 0 ] && printf ','
-      first=0
-      if [ -z "$DISK_TOTAL" ] || [ "$DISK_TOTAL" = "0" ]; then
-        printf '{"path":"%s","used_mib":null,"total_mib":null,"percent":null}' "$p"
-      else
-        printf '{"path":"%s","used_mib":%d,"total_mib":%d,"percent":%d}' \
-          "$p" "$(h_mib "$DISK_AVAIL")" "$(h_mib "$DISK_TOTAL")" "$DISK_USEPCT"
-      fi
-    done; unset IFS
+    for_each_path disk_obj_json
     printf ']'
   fi
 
