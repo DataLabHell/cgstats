@@ -7,6 +7,10 @@ Unlike Kubernetes- or Prometheus-based monitoring, it requires **no agents, side
 
 The script has **zero dependencies** (pure `/bin/sh`) and outputs either **human-readable tables** (with colorized thresholds) or **machine-readable JSON** for easy integration into dashboards, editors, or CI pipelines.
 
+<p align="center">
+  <img src="docs/cgstats-output.png" alt="cgstats.sh table output showing CPU, memory, and disk usage" width="700">
+</p>
+
 > ⚠️ While the script includes support for both **cgroup v1 and v2**, it has been primarily developed and tested against **cgroup v2**.  
 > cgroup v1 support should work, but is not thoroughly tested.
 
