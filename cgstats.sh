@@ -173,9 +173,17 @@ mem_read(){
   if [ "$is_v2" -eq 1 ]; then
     MU=$(rd "$cg/memory.current" 0)
     ML=$(rd "$cg/memory.max" max)
+    INACT=$(awk '/^inactive_file / {print $2}' "$cg/memory.stat" 2>/dev/null)
   else
     MU=$(rd "$cg/memory/memory.usage_in_bytes" 0)
     ML=$(rd "$cg/memory/memory.limit_in_bytes" max)
+    INACT=$(awk '/^total_inactive_file / {print $2}' "$cg/memory/memory.stat" 2>/dev/null)
+  fi
+  # memory.current/usage_in_bytes counts reclaimable page cache, which inflates
+  # the figure well past what processes actually hold. Subtract inactive_file to
+  # approximate the working set, matching what kubectl top / cAdvisor report.
+  if [ -n "$INACT" ] && [ "$INACT" -le "$MU" ] 2>/dev/null; then
+    MU=$(( MU - INACT ))
   fi
   [ -n "$OVR_MEM_LIM_MIB" ] && ML=$(( OVR_MEM_LIM_MIB * 1024 * 1024 ))
 }
