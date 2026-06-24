@@ -295,6 +295,14 @@ print_json() {
 # --- main loop ---
 trap 'printf "\n"; exit 0' INT TERM
 
+# CPU usage is a delta between two samples. In --once mode the loop only runs
+# a single iteration, so prime an initial sample and let one interval elapse;
+# otherwise CPU would always report 0.00.
+if [ "$ONCE" -eq 1 ] && [ "$SHOW_CPU" -eq 1 ]; then
+  cpu_sample
+  sleep "$INTERVAL"
+fi
+
 while :; do
   [ "$SHOW_CPU" -eq 1 ] && cpu_sample
   [ "$SHOW_MEM" -eq 1 ] && mem_read
