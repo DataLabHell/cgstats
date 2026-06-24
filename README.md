@@ -44,7 +44,7 @@ curl -L https://raw.githubusercontent.com/DataLabHell/cgstats/main/cgstats.sh \
 | Flag                | Description                                   | Default        |
 | ------------------- | --------------------------------------------- | -------------- |
 | `-i SECONDS`        | Refresh interval in seconds                   | `1`            |
-| `-p PATHS`          | Comma-separated list of disk paths to monitor | ''             |
+| `-p PATHS`          | Disk paths to monitor; comma-separate and/or repeat the flag | ''             |
 | `--once`            | Print a single sample and exit                | (loop forever) |
 | `--no-cpu`          | Disable CPU stats                             | enabled        |
 | `--no-mem`          | Disable memory stats                          | enabled        |
@@ -68,10 +68,11 @@ Run with defaults:
 ./cgstats.sh
 ```
 
-Sample multiple paths:
+Sample multiple paths (comma-separated, repeated `-p`, or a mix — all equivalent):
 
 ```sh
 ./cgstats.sh -i 2 -p "/home/jovyan,/data"
+./cgstats.sh -i 2 -p /home/jovyan -p /data
 ```
 
 JSON output once:

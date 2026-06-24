@@ -1,20 +1,10 @@
 #!/bin/sh
 # cgstats.sh — live CPU/MEM/DISK via cgroups (POSIX sh)
-# Usage:
-#   ./cgstats.sh [-i SECONDS] [-p PATHS]
-#       [--no-cpu] [--no-mem] [--no-disk]
-#       [--cpu-limit CORES] [--mem-limit MIB]
-#       [--cpu-warn PCT] [--cpu-crit PCT]
-#       [--mem-warn PCT] [--mem-crit PCT]
-#       [--disk-warn PCT] [--disk-crit PCT]
-#       [--output table|json]
 #
-# Examples:
-#   ./cgstats.sh
-#   ./cgstats.sh -i 2 -p "/home/jovyan,/data"
-#   ./cgstats.sh --no-disk --output json
-#   ./cgstats.sh --cpu-limit 2 --mem-limit 4096 --cpu-warn 60 --cpu-crit 85
-#   ./cgstats.sh --output json -i 5
+# Reports CPU, memory, and disk usage for the current cgroup (v1 or v2) as a
+# colored table or JSON. Works on any distro, including Alpine/BusyBox.
+#
+# Run with --help for usage, options, and examples.
 
 # Defaults
 INTERVAL=1
@@ -30,36 +20,104 @@ MEM_WARN=70
 MEM_CRIT=90
 DISK_WARN=80
 DISK_CRIT=90
-OUTPUT_FORMAT=""   # json
+OUTPUT_FORMAT=""   # table|json (empty = table)
 ONCE=0
+
+# ----- arg validation helpers -----
+die() { printf 'cgstats: %s\n' "$*" >&2; exit 1; }
+# non-negative integer
+is_uint() { case "${1:-}" in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+# non-negative number, optionally one decimal point (e.g. 0.5, 2)
+is_num() {
+  case "${1:-}" in
+    '' | . | *[!0-9.]* | *.*.*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+# percentage in 0..100
+is_pct() { is_uint "$1" && [ "$1" -le 100 ]; }
 
 # ----- parse args (pure /bin/sh) -----
 while [ $# -gt 0 ]; do
   case "$1" in
-    -i) INTERVAL="$2"; shift 2 ;;
-    -p) MON_PATHS="$2"; shift 2 ;;
+    -i) [ $# -ge 2 ] || die "-i requires a value"
+        is_num "$2" || die "-i must be a number (seconds): $2"
+        INTERVAL="$2"; shift 2 ;;
+    -p) [ $# -ge 2 ] || die "-p requires a value"
+        MON_PATHS="${MON_PATHS:+$MON_PATHS,}$2"; shift 2 ;;
     --once)    ONCE=1; shift ;;
     --no-cpu)  SHOW_CPU=0; shift ;;
     --no-mem)  SHOW_MEM=0; shift ;;
     --no-disk) SHOW_DISK=0; shift ;;
-    --cpu-limit)  OVR_CPU_LIM="$2"; shift 2 ;;
-    --mem-limit)  OVR_MEM_LIM_MIB="$2"; shift 2 ;;
-    --cpu-warn)   CPU_WARN="$2"; shift 2 ;;
-    --cpu-crit)   CPU_CRIT="$2"; shift 2 ;;
-    --mem-warn)   MEM_WARN="$2"; shift 2 ;;
-    --mem-crit)   MEM_CRIT="$2"; shift 2 ;;
-    --disk-warn)  DISK_WARN="$2"; shift 2 ;;
-    --disk-crit)  DISK_CRIT="$2"; shift 2 ;;
-    --output)     OUTPUT_FORMAT="$2"; shift 2 ;;
+    --cpu-limit) [ $# -ge 2 ] || die "--cpu-limit requires a value"
+        is_num "$2" || die "--cpu-limit must be a number (cores): $2"
+        OVR_CPU_LIM="$2"; shift 2 ;;
+    --mem-limit) [ $# -ge 2 ] || die "--mem-limit requires a value"
+        is_uint "$2" || die "--mem-limit must be an integer (MiB): $2"
+        OVR_MEM_LIM_MIB="$2"; shift 2 ;;
+    --cpu-warn) [ $# -ge 2 ] || die "--cpu-warn requires a value"
+        is_pct "$2" || die "--cpu-warn must be 0-100: $2"
+        CPU_WARN="$2"; shift 2 ;;
+    --cpu-crit) [ $# -ge 2 ] || die "--cpu-crit requires a value"
+        is_pct "$2" || die "--cpu-crit must be 0-100: $2"
+        CPU_CRIT="$2"; shift 2 ;;
+    --mem-warn) [ $# -ge 2 ] || die "--mem-warn requires a value"
+        is_pct "$2" || die "--mem-warn must be 0-100: $2"
+        MEM_WARN="$2"; shift 2 ;;
+    --mem-crit) [ $# -ge 2 ] || die "--mem-crit requires a value"
+        is_pct "$2" || die "--mem-crit must be 0-100: $2"
+        MEM_CRIT="$2"; shift 2 ;;
+    --disk-warn) [ $# -ge 2 ] || die "--disk-warn requires a value"
+        is_pct "$2" || die "--disk-warn must be 0-100: $2"
+        DISK_WARN="$2"; shift 2 ;;
+    --disk-crit) [ $# -ge 2 ] || die "--disk-crit requires a value"
+        is_pct "$2" || die "--disk-crit must be 0-100: $2"
+        DISK_CRIT="$2"; shift 2 ;;
+    --output) [ $# -ge 2 ] || die "--output requires a value"
+        case "$2" in table | json) ;; *) die "--output must be table or json: $2" ;; esac
+        OUTPUT_FORMAT="$2"; shift 2 ;;
     -h|--help)
       cat <<EOF
-Usage: $0 [-i SECONDS] [-p PATHS]
+cgstats.sh — live CPU/MEM/DISK via cgroups (POSIX sh)
+
+Reports CPU, memory, and disk usage for the current cgroup (v1 or v2) as a
+colored table or JSON. Works on any distro, including Alpine/BusyBox.
+
+Usage: $0 [-i SECONDS] [-p PATHS] [--once]
           [--no-cpu] [--no-mem] [--no-disk]
           [--cpu-limit CORES] [--mem-limit MIB]
           [--cpu-warn PCT] [--cpu-crit PCT]
           [--mem-warn PCT] [--mem-crit PCT]
           [--disk-warn PCT] [--disk-crit PCT]
           [--output table|json]
+
+Options:
+  -i SECONDS             refresh interval (default 1)
+  -p PATHS               disk path(s) to monitor; comma-separated and/or
+                         repeatable, all merged (default: none)
+  --once                 print a single sample and exit (default: loop)
+  --no-cpu               disable the CPU section
+  --no-mem               disable the memory section
+  --no-disk              disable the disk section
+  --cpu-limit CORES      override CPU limit in cores (default: from cgroup)
+  --mem-limit MIB        override memory limit in MiB (default: from cgroup)
+  --cpu-warn PCT         CPU warn/crit thresholds, % of limit (default 50/80)
+  --cpu-crit PCT
+  --mem-warn PCT         memory warn/crit thresholds, % of limit (default 70/90)
+  --mem-crit PCT
+  --disk-warn PCT        disk warn/crit thresholds, % used (default 80/90)
+  --disk-crit PCT
+  --output table|json    output format (default table)
+  -h, --help             show this help and exit
+
+Examples:
+  $0
+  $0 -i 2 -p "/home/jovyan,/data"
+  $0 -i 2 -p /home/jovyan -p /data
+  $0 --no-disk --output json
+  $0 --cpu-limit 2 --mem-limit 4096 --cpu-warn 60 --cpu-crit 85
+  $0 --output json -i 5
+  $0 --once --output json
 EOF
       exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
@@ -97,12 +155,14 @@ pct_color() {
 disk_calc() {
   # in: $1 path
   P="$1"
-  line=$(df -PB1 "$P" 2>/dev/null | awk 'NR==2 {print $2, $3, $5}')
+  # df -P -k is POSIX (1K blocks); -B is a GNU extension that BusyBox/Alpine
+  # lack. Convert KiB -> bytes here so downstream math/h_mib stays in bytes.
+  line=$(df -P -k "$P" 2>/dev/null | awk 'NR==2 {print $2*1024, $3*1024, $5}')
   TOTAL=$(printf "%s\n" "$line" | awk '{print $1}')
   USED=$(printf "%s\n" "$line" | awk '{print $2}')
   RAWPCT=$(printf "%s\n" "$line" | awk '{print $3}')
   if [ -z "$TOTAL" ] || [ -z "$USED" ]; then
-    DISK_AVAIL="0"; DISK_TOTAL="0"; DISK_USEPCT=""
+    DISK_USED="0"; DISK_TOTAL="0"; DISK_USEPCT=""
     return
   fi
   USEP=$(printf "%s" "$RAWPCT" | tr -d '%')
@@ -110,9 +170,19 @@ disk_calc() {
     USEP=$(awk -v u="$USED" -v t="$TOTAL" 'BEGIN{if(t>0){printf("%d", (u*100)/t)} else {print 0}}')
     RAWPCT="${USEP}%"
   fi
-  DISK_AVAIL="$USED"
+  DISK_USED="$USED"
   DISK_TOTAL="$TOTAL"
   DISK_USEPCT="$USEP"
+}
+
+# Iterate MON_PATHS (comma-separated, possibly repeated -p) and call $1 with
+# each non-empty path. Single source of truth for path splitting.
+for_each_path() {
+  _cb="$1"
+  IFS=','; for p in $MON_PATHS; do
+    [ -n "$p" ] || continue
+    "$_cb" "$p"
+  done; unset IFS
 }
 
 # memory (bytes)
@@ -120,9 +190,17 @@ mem_read(){
   if [ "$is_v2" -eq 1 ]; then
     MU=$(rd "$cg/memory.current" 0)
     ML=$(rd "$cg/memory.max" max)
+    INACT=$(awk '/^inactive_file / {print $2}' "$cg/memory.stat" 2>/dev/null)
   else
     MU=$(rd "$cg/memory/memory.usage_in_bytes" 0)
     ML=$(rd "$cg/memory/memory.limit_in_bytes" max)
+    INACT=$(awk '/^total_inactive_file / {print $2}' "$cg/memory/memory.stat" 2>/dev/null)
+  fi
+  # memory.current/usage_in_bytes counts reclaimable page cache, which inflates
+  # the figure well past what processes actually hold. Subtract inactive_file to
+  # approximate the working set, matching what kubectl top / cAdvisor report.
+  if [ -n "$INACT" ] && [ "$INACT" -le "$MU" ] 2>/dev/null; then
+    MU=$(( MU - INACT ))
   fi
   [ -n "$OVR_MEM_LIM_MIB" ] && ML=$(( OVR_MEM_LIM_MIB * 1024 * 1024 ))
 }
@@ -130,7 +208,11 @@ mem_read(){
 # cpu sampler across ticks
 CPU_PREV_U=""; CPU_PREV_T=""
 cpu_sample(){
+  # GNU date supports %N (nanoseconds); BusyBox date may emit a literal "N"
+  # with a zero exit, so the `||` fallback never fires. Detect that and fall
+  # back to whole-second precision.
   NOW_T=$(date +%s.%N 2>/dev/null || date +%s)
+  case "$NOW_T" in *[!0-9.]*) NOW_T=$(date +%s) ;; esac
   if [ "$is_v2" -eq 1 ]; then
     CUR_U=$(awk '/^usage_usec/ {print $2}' "$cg/cpu.stat" 2>/dev/null)
     line=$(rd "$cg/cpu.max" "max 100000")
@@ -182,6 +264,20 @@ cpu_sample(){
 }
 
 # ---- output: TABLE ----
+# Per-path callback for table mode (invoked via for_each_path).
+disk_row_table() {
+  p="$1"
+  disk_calc "$p"
+  if [ -z "$DISK_TOTAL" ] || [ "$DISK_TOTAL" = "0" ]; then
+    printf '%b  • Disk %s: N/A%b\n' "$YELLOW" "$p" "$NC"
+    return
+  fi
+  USED_MB=$(h_mib "$DISK_USED"); TOTAL_MB=$(h_mib "$DISK_TOTAL")
+  dcol=$(pct_color "$DISK_USEPCT" "$DISK_WARN" "$DISK_CRIT")
+  printf '  • Disk %s: %b%s MiB / %s MiB (used%%: %s%%)%b\n' \
+    "$p" "$dcol" "$USED_MB" "$TOTAL_MB" "$DISK_USEPCT" "$NC"
+}
+
 print_table() {
   # header
   printf '\033[H\033[J'
@@ -217,23 +313,27 @@ print_table() {
   
   # DISK
   if [ "$SHOW_DISK" -eq 1 ]; then
-    IFS=','; for p in $MON_PATHS; do
-      [ -n "$p" ] || continue
-      disk_calc "$p"
-      if [ -z "$DISK_TOTAL" ] || [ "$DISK_TOTAL" = "0" ]; then
-        printf '%b  • Disk %s: N/A%b\n' "$YELLOW" "$p" "$NC"
-        continue
-      fi
-      USED_MB=$(h_mib "$DISK_AVAIL"); TOTAL_MB=$(h_mib "$DISK_TOTAL")
-      dcol=$(pct_color "$DISK_USEPCT" "$DISK_WARN" "$DISK_CRIT")
-      printf '  • Disk %s: %b%s MiB / %s MiB (used%%: %s%%)%b\n' \
-        "$p" "$dcol" "$USED_MB" "$TOTAL_MB" "$DISK_USEPCT" "$NC"
-    done; unset IFS
+    for_each_path disk_row_table
   fi
 }
 
 # ---- output: JSON ----
 # Note: no jq dependency, escape manually
+# Per-path callback for JSON mode (invoked via for_each_path). Uses the global
+# `first` to emit comma separators between array elements.
+disk_obj_json() {
+  p="$1"
+  disk_calc "$p"
+  [ "$first" -eq 0 ] && printf ','
+  first=0
+  if [ -z "$DISK_TOTAL" ] || [ "$DISK_TOTAL" = "0" ]; then
+    printf '{"path":"%s","used_mib":null,"total_mib":null,"percent":null}' "$p"
+  else
+    printf '{"path":"%s","used_mib":%d,"total_mib":%d,"percent":%d}' \
+      "$p" "$(h_mib "$DISK_USED")" "$(h_mib "$DISK_TOTAL")" "$DISK_USEPCT"
+  fi
+}
+
 print_json() {
   TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
   CG_VER=$( [ -f "$cg/cgroup.controllers" ] && echo v2 || echo v1 )
@@ -241,23 +341,23 @@ print_json() {
   printf '{'
   printf '"container_usage":{'
   printf '"cgroup_version":"%s",' "$CG_VER"
-  printf '"timestamp":"%s",' "$TS"
+  printf '"timestamp":"%s"' "$TS"
 
-  # CPU
+  # CPU (leading comma keeps output valid regardless of which sections are on)
   if [ "$SHOW_CPU" -eq 1 ]; then
-    printf '"cpu":{'
+    printf ',"cpu":{'
     printf '"used_cores":%.2f,' "$CORES_USED"
     if [ "$CORES_LIM" = "inf" ]; then
       printf '"limit_cores":null,"percent":null'
     else
       printf '"limit_cores":%.2f,"percent":%d' "$CORES_LIM" "$CPU_PCT"
     fi
-    printf '},'
+    printf '}'
   fi
 
   # Memory
   if [ "$SHOW_MEM" -eq 1 ]; then
-    printf '"memory":{'
+    printf ',"memory":{'
     if [ "$ML" = "max" ] || [ -z "$ML" ]; then
       printf '"used_mib":%d,"limit_mib":null,"percent":null' "$(h_mib "$MU")"
     else
@@ -265,29 +365,15 @@ print_json() {
         "$(h_mib "$MU")" "$(h_mib "$ML")" \
         "$(awk -v u="$MU" -v l="$ML" 'BEGIN{printf("%d",(l>0? (u*100)/l:0))}')"
     fi
-    printf '},'
+    printf '}'
   fi
 
   # Disks
   if [ "$SHOW_DISK" -eq 1 ]; then
-    printf '"disks":['
+    printf ',"disks":['
     first=1
-    IFS=','; for p in $MON_PATHS; do
-      [ -n "$p" ] || continue
-      disk_calc "$p"
-      [ $first -eq 0 ] && printf ','
-      first=0
-      if [ -z "$DISK_TOTAL" ] || [ "$DISK_TOTAL" = "0" ]; then
-        printf '{"path":"%s","used_mib":null,"total_mib":null,"percent":null}' "$p"
-      else
-        printf '{"path":"%s","used_mib":%d,"total_mib":%d,"percent":%d}' \
-          "$p" "$(h_mib "$DISK_AVAIL")" "$(h_mib "$DISK_TOTAL")" "$DISK_USEPCT"
-      fi
-    done; unset IFS
+    for_each_path disk_obj_json
     printf ']'
-  else
-    # Trim trailing comma if no disks
-    sed -i 's/,$//' # optional depending on approach
   fi
 
   printf '}}'
@@ -297,6 +383,14 @@ print_json() {
 
 # --- main loop ---
 trap 'printf "\n"; exit 0' INT TERM
+
+# CPU usage is a delta between two samples. In --once mode the loop only runs
+# a single iteration, so prime an initial sample and let one interval elapse;
+# otherwise CPU would always report 0.00.
+if [ "$ONCE" -eq 1 ] && [ "$SHOW_CPU" -eq 1 ]; then
+  cpu_sample
+  sleep "$INTERVAL"
+fi
 
 while :; do
   [ "$SHOW_CPU" -eq 1 ] && cpu_sample
