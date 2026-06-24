@@ -103,7 +103,9 @@ pct_color() {
 disk_calc() {
   # in: $1 path
   P="$1"
-  line=$(df -PB1 "$P" 2>/dev/null | awk 'NR==2 {print $2, $3, $5}')
+  # df -P -k is POSIX (1K blocks); -B is a GNU extension that BusyBox/Alpine
+  # lack. Convert KiB -> bytes here so downstream math/h_mib stays in bytes.
+  line=$(df -P -k "$P" 2>/dev/null | awk 'NR==2 {print $2*1024, $3*1024, $5}')
   TOTAL=$(printf "%s\n" "$line" | awk '{print $1}')
   USED=$(printf "%s\n" "$line" | awk '{print $2}')
   RAWPCT=$(printf "%s\n" "$line" | awk '{print $3}')
