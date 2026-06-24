@@ -241,23 +241,23 @@ print_json() {
   printf '{'
   printf '"container_usage":{'
   printf '"cgroup_version":"%s",' "$CG_VER"
-  printf '"timestamp":"%s",' "$TS"
+  printf '"timestamp":"%s"' "$TS"
 
-  # CPU
+  # CPU (leading comma keeps output valid regardless of which sections are on)
   if [ "$SHOW_CPU" -eq 1 ]; then
-    printf '"cpu":{'
+    printf ',"cpu":{'
     printf '"used_cores":%.2f,' "$CORES_USED"
     if [ "$CORES_LIM" = "inf" ]; then
       printf '"limit_cores":null,"percent":null'
     else
       printf '"limit_cores":%.2f,"percent":%d' "$CORES_LIM" "$CPU_PCT"
     fi
-    printf '},'
+    printf '}'
   fi
 
   # Memory
   if [ "$SHOW_MEM" -eq 1 ]; then
-    printf '"memory":{'
+    printf ',"memory":{'
     if [ "$ML" = "max" ] || [ -z "$ML" ]; then
       printf '"used_mib":%d,"limit_mib":null,"percent":null' "$(h_mib "$MU")"
     else
@@ -265,12 +265,12 @@ print_json() {
         "$(h_mib "$MU")" "$(h_mib "$ML")" \
         "$(awk -v u="$MU" -v l="$ML" 'BEGIN{printf("%d",(l>0? (u*100)/l:0))}')"
     fi
-    printf '},'
+    printf '}'
   fi
 
   # Disks
   if [ "$SHOW_DISK" -eq 1 ]; then
-    printf '"disks":['
+    printf ',"disks":['
     first=1
     IFS=','; for p in $MON_PATHS; do
       [ -n "$p" ] || continue
@@ -285,9 +285,6 @@ print_json() {
       fi
     done; unset IFS
     printf ']'
-  else
-    # Trim trailing comma if no disks
-    sed -i 's/,$//' # optional depending on approach
   fi
 
   printf '}}'
