@@ -9,9 +9,13 @@
 #       [--disk-warn PCT] [--disk-crit PCT]
 #       [--output table|json]
 #
+# Notes:
+#   -p accepts a comma-separated list and/or may be repeated; all paths are merged.
+#
 # Examples:
 #   ./cgstats.sh
 #   ./cgstats.sh -i 2 -p "/home/jovyan,/data"
+#   ./cgstats.sh -i 2 -p /home/jovyan -p /data
 #   ./cgstats.sh --no-disk --output json
 #   ./cgstats.sh --cpu-limit 2 --mem-limit 4096 --cpu-warn 60 --cpu-crit 85
 #   ./cgstats.sh --output json -i 5
@@ -37,7 +41,7 @@ ONCE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     -i) INTERVAL="$2"; shift 2 ;;
-    -p) MON_PATHS="$2"; shift 2 ;;
+    -p) MON_PATHS="${MON_PATHS:+$MON_PATHS,}$2"; shift 2 ;;
     --once)    ONCE=1; shift ;;
     --no-cpu)  SHOW_CPU=0; shift ;;
     --no-mem)  SHOW_MEM=0; shift ;;
@@ -60,6 +64,8 @@ Usage: $0 [-i SECONDS] [-p PATHS]
           [--mem-warn PCT] [--mem-crit PCT]
           [--disk-warn PCT] [--disk-crit PCT]
           [--output table|json]
+
+  -p accepts a comma-separated list and/or may be repeated; all paths are merged.
 EOF
       exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
