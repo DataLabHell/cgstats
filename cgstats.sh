@@ -1,24 +1,10 @@
 #!/bin/sh
 # cgstats.sh — live CPU/MEM/DISK via cgroups (POSIX sh)
-# Usage:
-#   ./cgstats.sh [-i SECONDS] [-p PATHS]
-#       [--no-cpu] [--no-mem] [--no-disk]
-#       [--cpu-limit CORES] [--mem-limit MIB]
-#       [--cpu-warn PCT] [--cpu-crit PCT]
-#       [--mem-warn PCT] [--mem-crit PCT]
-#       [--disk-warn PCT] [--disk-crit PCT]
-#       [--output table|json]
 #
-# Notes:
-#   -p accepts a comma-separated list and/or may be repeated; all paths are merged.
+# Reports CPU, memory, and disk usage for the current cgroup (v1 or v2) as a
+# colored table or JSON. Works on any distro, including Alpine/BusyBox.
 #
-# Examples:
-#   ./cgstats.sh
-#   ./cgstats.sh -i 2 -p "/home/jovyan,/data"
-#   ./cgstats.sh -i 2 -p /home/jovyan -p /data
-#   ./cgstats.sh --no-disk --output json
-#   ./cgstats.sh --cpu-limit 2 --mem-limit 4096 --cpu-warn 60 --cpu-crit 85
-#   ./cgstats.sh --output json -i 5
+# Run with --help for usage, options, and examples.
 
 # Defaults
 INTERVAL=1
@@ -92,7 +78,12 @@ while [ $# -gt 0 ]; do
         OUTPUT_FORMAT="$2"; shift 2 ;;
     -h|--help)
       cat <<EOF
-Usage: $0 [-i SECONDS] [-p PATHS]
+cgstats.sh — live CPU/MEM/DISK via cgroups (POSIX sh)
+
+Reports CPU, memory, and disk usage for the current cgroup (v1 or v2) as a
+colored table or JSON. Works on any distro, including Alpine/BusyBox.
+
+Usage: $0 [-i SECONDS] [-p PATHS] [--once]
           [--no-cpu] [--no-mem] [--no-disk]
           [--cpu-limit CORES] [--mem-limit MIB]
           [--cpu-warn PCT] [--cpu-crit PCT]
@@ -100,7 +91,33 @@ Usage: $0 [-i SECONDS] [-p PATHS]
           [--disk-warn PCT] [--disk-crit PCT]
           [--output table|json]
 
-  -p accepts a comma-separated list and/or may be repeated; all paths are merged.
+Options:
+  -i SECONDS             refresh interval (default 1)
+  -p PATHS               disk path(s) to monitor; comma-separated and/or
+                         repeatable, all merged (default: none)
+  --once                 print a single sample and exit (default: loop)
+  --no-cpu               disable the CPU section
+  --no-mem               disable the memory section
+  --no-disk              disable the disk section
+  --cpu-limit CORES      override CPU limit in cores (default: from cgroup)
+  --mem-limit MIB        override memory limit in MiB (default: from cgroup)
+  --cpu-warn PCT         CPU warn/crit thresholds, % of limit (default 50/80)
+  --cpu-crit PCT
+  --mem-warn PCT         memory warn/crit thresholds, % of limit (default 70/90)
+  --mem-crit PCT
+  --disk-warn PCT        disk warn/crit thresholds, % used (default 80/90)
+  --disk-crit PCT
+  --output table|json    output format (default table)
+  -h, --help             show this help and exit
+
+Examples:
+  $0
+  $0 -i 2 -p "/home/jovyan,/data"
+  $0 -i 2 -p /home/jovyan -p /data
+  $0 --no-disk --output json
+  $0 --cpu-limit 2 --mem-limit 4096 --cpu-warn 60 --cpu-crit 85
+  $0 --output json -i 5
+  $0 --once --output json
 EOF
       exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
