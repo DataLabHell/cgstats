@@ -34,7 +34,7 @@ MEM_WARN=70
 MEM_CRIT=90
 DISK_WARN=80
 DISK_CRIT=90
-OUTPUT_FORMAT=""   # json
+OUTPUT_FORMAT=""   # table|json (empty = table)
 ONCE=0
 
 # ----- arg validation helpers -----
@@ -145,7 +145,7 @@ disk_calc() {
   USED=$(printf "%s\n" "$line" | awk '{print $2}')
   RAWPCT=$(printf "%s\n" "$line" | awk '{print $3}')
   if [ -z "$TOTAL" ] || [ -z "$USED" ]; then
-    DISK_AVAIL="0"; DISK_TOTAL="0"; DISK_USEPCT=""
+    DISK_USED="0"; DISK_TOTAL="0"; DISK_USEPCT=""
     return
   fi
   USEP=$(printf "%s" "$RAWPCT" | tr -d '%')
@@ -153,7 +153,7 @@ disk_calc() {
     USEP=$(awk -v u="$USED" -v t="$TOTAL" 'BEGIN{if(t>0){printf("%d", (u*100)/t)} else {print 0}}')
     RAWPCT="${USEP}%"
   fi
-  DISK_AVAIL="$USED"
+  DISK_USED="$USED"
   DISK_TOTAL="$TOTAL"
   DISK_USEPCT="$USEP"
 }
@@ -247,7 +247,7 @@ disk_row_table() {
     printf '%b  • Disk %s: N/A%b\n' "$YELLOW" "$p" "$NC"
     return
   fi
-  USED_MB=$(h_mib "$DISK_AVAIL"); TOTAL_MB=$(h_mib "$DISK_TOTAL")
+  USED_MB=$(h_mib "$DISK_USED"); TOTAL_MB=$(h_mib "$DISK_TOTAL")
   dcol=$(pct_color "$DISK_USEPCT" "$DISK_WARN" "$DISK_CRIT")
   printf '  • Disk %s: %b%s MiB / %s MiB (used%%: %s%%)%b\n' \
     "$p" "$dcol" "$USED_MB" "$TOTAL_MB" "$DISK_USEPCT" "$NC"
@@ -305,7 +305,7 @@ disk_obj_json() {
     printf '{"path":"%s","used_mib":null,"total_mib":null,"percent":null}' "$p"
   else
     printf '{"path":"%s","used_mib":%d,"total_mib":%d,"percent":%d}' \
-      "$p" "$(h_mib "$DISK_AVAIL")" "$(h_mib "$DISK_TOTAL")" "$DISK_USEPCT"
+      "$p" "$(h_mib "$DISK_USED")" "$(h_mib "$DISK_TOTAL")" "$DISK_USEPCT"
   fi
 }
 
