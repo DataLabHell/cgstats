@@ -183,7 +183,11 @@ mem_read(){
 # cpu sampler across ticks
 CPU_PREV_U=""; CPU_PREV_T=""
 cpu_sample(){
+  # GNU date supports %N (nanoseconds); BusyBox date may emit a literal "N"
+  # with a zero exit, so the `||` fallback never fires. Detect that and fall
+  # back to whole-second precision.
   NOW_T=$(date +%s.%N 2>/dev/null || date +%s)
+  case "$NOW_T" in *[!0-9.]*) NOW_T=$(date +%s) ;; esac
   if [ "$is_v2" -eq 1 ]; then
     CUR_U=$(awk '/^usage_usec/ {print $2}' "$cg/cpu.stat" 2>/dev/null)
     line=$(rd "$cg/cpu.max" "max 100000")
