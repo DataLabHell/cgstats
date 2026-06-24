@@ -88,6 +88,7 @@ while [ $# -gt 0 ]; do
         is_pct "$2" || die "--disk-crit must be 0-100: $2"
         DISK_CRIT="$2"; shift 2 ;;
     --output) [ $# -ge 2 ] || die "--output requires a value"
+        case "$2" in table | json) ;; *) die "--output must be table or json: $2" ;; esac
         OUTPUT_FORMAT="$2"; shift 2 ;;
     -h|--help)
       cat <<EOF
