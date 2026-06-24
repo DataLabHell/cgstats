@@ -37,24 +37,58 @@ DISK_CRIT=90
 OUTPUT_FORMAT=""   # json
 ONCE=0
 
+# ----- arg validation helpers -----
+die() { printf 'cgstats: %s\n' "$*" >&2; exit 1; }
+# non-negative integer
+is_uint() { case "${1:-}" in '' | *[!0-9]*) return 1 ;; *) return 0 ;; esac; }
+# non-negative number, optionally one decimal point (e.g. 0.5, 2)
+is_num() {
+  case "${1:-}" in
+    '' | . | *[!0-9.]* | *.*.*) return 1 ;;
+    *) return 0 ;;
+  esac
+}
+# percentage in 0..100
+is_pct() { is_uint "$1" && [ "$1" -le 100 ]; }
+
 # ----- parse args (pure /bin/sh) -----
 while [ $# -gt 0 ]; do
   case "$1" in
-    -i) INTERVAL="$2"; shift 2 ;;
-    -p) MON_PATHS="${MON_PATHS:+$MON_PATHS,}$2"; shift 2 ;;
+    -i) [ $# -ge 2 ] || die "-i requires a value"
+        is_num "$2" || die "-i must be a number (seconds): $2"
+        INTERVAL="$2"; shift 2 ;;
+    -p) [ $# -ge 2 ] || die "-p requires a value"
+        MON_PATHS="${MON_PATHS:+$MON_PATHS,}$2"; shift 2 ;;
     --once)    ONCE=1; shift ;;
     --no-cpu)  SHOW_CPU=0; shift ;;
     --no-mem)  SHOW_MEM=0; shift ;;
     --no-disk) SHOW_DISK=0; shift ;;
-    --cpu-limit)  OVR_CPU_LIM="$2"; shift 2 ;;
-    --mem-limit)  OVR_MEM_LIM_MIB="$2"; shift 2 ;;
-    --cpu-warn)   CPU_WARN="$2"; shift 2 ;;
-    --cpu-crit)   CPU_CRIT="$2"; shift 2 ;;
-    --mem-warn)   MEM_WARN="$2"; shift 2 ;;
-    --mem-crit)   MEM_CRIT="$2"; shift 2 ;;
-    --disk-warn)  DISK_WARN="$2"; shift 2 ;;
-    --disk-crit)  DISK_CRIT="$2"; shift 2 ;;
-    --output)     OUTPUT_FORMAT="$2"; shift 2 ;;
+    --cpu-limit) [ $# -ge 2 ] || die "--cpu-limit requires a value"
+        is_num "$2" || die "--cpu-limit must be a number (cores): $2"
+        OVR_CPU_LIM="$2"; shift 2 ;;
+    --mem-limit) [ $# -ge 2 ] || die "--mem-limit requires a value"
+        is_uint "$2" || die "--mem-limit must be an integer (MiB): $2"
+        OVR_MEM_LIM_MIB="$2"; shift 2 ;;
+    --cpu-warn) [ $# -ge 2 ] || die "--cpu-warn requires a value"
+        is_pct "$2" || die "--cpu-warn must be 0-100: $2"
+        CPU_WARN="$2"; shift 2 ;;
+    --cpu-crit) [ $# -ge 2 ] || die "--cpu-crit requires a value"
+        is_pct "$2" || die "--cpu-crit must be 0-100: $2"
+        CPU_CRIT="$2"; shift 2 ;;
+    --mem-warn) [ $# -ge 2 ] || die "--mem-warn requires a value"
+        is_pct "$2" || die "--mem-warn must be 0-100: $2"
+        MEM_WARN="$2"; shift 2 ;;
+    --mem-crit) [ $# -ge 2 ] || die "--mem-crit requires a value"
+        is_pct "$2" || die "--mem-crit must be 0-100: $2"
+        MEM_CRIT="$2"; shift 2 ;;
+    --disk-warn) [ $# -ge 2 ] || die "--disk-warn requires a value"
+        is_pct "$2" || die "--disk-warn must be 0-100: $2"
+        DISK_WARN="$2"; shift 2 ;;
+    --disk-crit) [ $# -ge 2 ] || die "--disk-crit requires a value"
+        is_pct "$2" || die "--disk-crit must be 0-100: $2"
+        DISK_CRIT="$2"; shift 2 ;;
+    --output) [ $# -ge 2 ] || die "--output requires a value"
+        OUTPUT_FORMAT="$2"; shift 2 ;;
     -h|--help)
       cat <<EOF
 Usage: $0 [-i SECONDS] [-p PATHS]
